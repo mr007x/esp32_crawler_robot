@@ -4,22 +4,24 @@
 
 Adafruit_VL53L0X lox = Adafruit_VL53L0X();
 
-#define MOTOR_BAK_IN1 1
-#define MOTOR_BAK_IN2 2
-#define MOTOR_BAK_EN 3
+#define MOTOR_BAK_IN1 2
+#define MOTOR_BAK_IN2 3
+#define MOTOR_BAK_EN 1
 
 #define MOTOR_FRAM_IN3 4
 #define MOTOR_FRAM_IN4 5
 #define MOTOR_FRAM_EN 6
 
-#define MIN_AVSTAND_FRAM 200
-#define HASTIGHET_NORMAL 200
-#define HASTIGHET_BACKA 150
+#define MIN_AVSTAND_FRAM 200 // Stop and act if object is closer than 200mm
+#define HASTIGHET_NORMAL 200 // PWM-value (0-255) for normal speed
+#define HASTIGHET_BACKA 150 // PWM-value for reverse
 
-const int pwmKanalBak = 0;
-const int pwmFreq = 5000;
-const int pwmUpplosning = 8;
+// PWM settings for ESP32 (ledc)
+const int pwmKanalBak = 0; // Choose a PWM Channel
+const int pwmFreq = 5000; // Frequency in Hz
+const int pwmUpplosning = 8; // 8-bit resolution (0-255)
 
+// Values to keep track of current state
 enum BilStatus { KOR_FRAMAT, VAXLAR, BACKAR, SVANGER, STANNA };
 BilStatus nuvarandeStatus = STANNA;
 
@@ -40,41 +42,48 @@ void setup() {
   pinMode(MOTOR_FRAM_IN3, OUTPUT);
   pinMode(MOTOR_FRAM_IN4, OUTPUT);
 
+  // Configure PWM for driving motor with ESP32:s ledc-function
   ledcSetup(pwmKanalBak, pwmFreq, pwmUpplosning);
   ledcAttachPin(MOTOR_BAK_EN, pwmKanalBak);
 
   Serial.println("Setup klar. Startar huvudloop");
   delay(1000);
-  stannaBilen();
+  stannaBilen(); // Make sure the car is standing still at start
 }
 
 void loop() {
-  int avstand = lasAvstand();
+  int avstand = lasAvstand(); // Read distance
   if (avstand < 0) {
     Serial.printlin("Sensorfel");
     stannaBilen();
     delay(500);
-    return;
+    return; // Try again
   }
 
+  // Print distance for debugging
   Serial.print("Avstånd: ");
   Serial.print(avstand);
   Serial.println(" mm");
 
+  // Make decision and act
   korLogik(avstand);
 
   delay(50);
 }
 
+/*
+ * Read distance with VL53L0X
+ * Return distance in mm or -1 if error
+ */
 int lasAvstand() {
   VL53L0X_RangingMeasurementData_t measure;
 
-  lox.rangingTest(&measure, false);
+  lox.rangingTest(&measure, false); // pass in true to get debug data printout
 
-  if (measure.RangeStatus != 4) {
+  if (measure.RangeStatus != 4) {  // phase failures have incorrect data
     return measure.RangeMillimeter;
   } else {
-    return -1;
+    return -1; // Error in reading
   }
 }
 
